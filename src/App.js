@@ -121,7 +121,36 @@ function EmailList({ token, selectedEmails, setSelectedEmails }) {
   );
 }
 
-function SharePointSelector({ token, siteId, setSiteId, listId, setListId }) {
+function FieldMapping({ columns, fieldMapping, setFieldMapping }) {
+  // Only show columns that are not hidden and are not system fields
+  const selectableColumns = columns.filter(col => !col.hidden && !col.readOnly && col.name !== 'ContentType' && col.name !== 'Attachments');
+  return (
+    <div style={{ margin: '20px 0', padding: 10, border: '1px solid #ccc', borderRadius: 6 }}>
+      <h4>SharePoint Field Mapping</h4>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {['subject', 'description', 'user', 'ticketnumber'].map(appField => (
+          <label key={appField}>
+            {appField.charAt(0).toUpperCase() + appField.slice(1)}:
+            <select
+              value={fieldMapping[appField] || ''}
+              onChange={e => setFieldMapping(f => ({ ...f, [appField]: e.target.value }))}
+              style={{ marginLeft: 8 }}
+            >
+              <option value="">(Do not map)</option>
+              {selectableColumns.map(col => (
+                <option key={col.name} value={col.name}>
+                  {col.displayName} ({col.name})
+                </option>
+              ))}
+            </select>
+          </label>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SharePointSelector({ token, siteId, setSiteId, listId, setListId, columns, setColumns }) {
   const [sites, setSites] = useState([]);
   const [lists, setLists] = useState([]);
 
@@ -143,12 +172,24 @@ function SharePointSelector({ token, siteId, setSiteId, listId, setListId }) {
       .then((data) => setLists(data.value || []));
   }, [token, siteId]);
 
+  useEffect(() => {
+    if (!token || !siteId || !listId) {
+      setColumns([]);
+      return;
+    }
+    fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/columns`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((res) => res.json())
+      .then((data) => setColumns(data.value || []));
+  }, [token, siteId, listId, setColumns]);
+
   return (
     <div>
       <div>
         <label>
           SharePoint Site:
-          <select value={siteId} onChange={(e) => setSiteId(e.target.value)}>
+          <select value={siteId} onChange={e => setSiteId(e.target.value)}>
             <option value="">Select a site</option>
             {sites.map((site) => (
               <option key={site.id} value={site.id}>
@@ -161,7 +202,7 @@ function SharePointSelector({ token, siteId, setSiteId, listId, setListId }) {
       <div>
         <label>
           SharePoint List:
-          <select value={listId} onChange={(e) => setListId(e.target.value)}>
+          <select value={listId} onChange={e => setListId(e.target.value)}>
             <option value="">Select a list</option>
             {lists.map((list) => (
               <option key={list.id} value={list.id}>
@@ -175,7 +216,7 @@ function SharePointSelector({ token, siteId, setSiteId, listId, setListId }) {
   );
 }
 
-function CreateTicketsButton({ token, selectedEmails, emails, siteId, listId, onResult }) {
+function CreateTicketsButton({ token, selectedEmails, emails, siteId, listId, onResult, fieldMapping }) {
   const [loading, setLoading] = useState(false);
 
   const handleCreateTickets = async () => {
@@ -197,11 +238,10 @@ function CreateTicketsButton({ token, selectedEmails, emails, siteId, listId, on
       }
       const payload = {
         fields: {
-          subject: email.subject,
-          description: email.bodyPreview,
-          user: email.from?.emailAddress?.address,
-          ticketnumber: ticketNumber,
-          // Add more fields as needed
+          ...(fieldMapping.subject ? { [fieldMapping.subject]: email.subject } : {}),
+          ...(fieldMapping.description ? { [fieldMapping.description]: email.bodyPreview } : {}),
+          ...(fieldMapping.user ? { [fieldMapping.user]: email.from?.emailAddress?.address } : {}),
+          ...(fieldMapping.ticketnumber ? { [fieldMapping.ticketnumber]: ticketNumber } : {}),
         },
       };
       try {
@@ -249,6 +289,8 @@ function MainApp() {
   const [listId, setListId] = useState("");
   const [emails, setEmails] = useState([]);
   const [results, setResults] = useState([]);
+  const [columns, setColumns] = useState([]);
+  const [fieldMapping, setFieldMapping] = useState({});
 
   // Fetch emails after Outlook login
   useEffect(() => {
@@ -284,7 +326,16 @@ function MainApp() {
             setSiteId={setSiteId}
             listId={listId}
             setListId={setListId}
+            columns={columns}
+            setColumns={setColumns}
           />
+          {columns.length > 0 && (
+            <FieldMapping
+              columns={columns}
+              fieldMapping={fieldMapping}
+              setFieldMapping={setFieldMapping}
+            />
+          )}
           <EmailList
             token={outlookToken}
             selectedEmails={selectedEmails}
@@ -297,6 +348,7 @@ function MainApp() {
             siteId={siteId}
             listId={listId}
             onResult={setResults}
+            fieldMapping={fieldMapping}
           />
           <div style={{ marginTop: 20 }}>
             {results.length > 0 && (
