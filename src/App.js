@@ -229,12 +229,13 @@ function CreateTicketsButton({ token, selectedEmails, emails, siteId, listId, on
     for (let emailId of selectedEmails) {
       const email = emails.find((e) => e.id === emailId);
       if (!email) continue;
-      // Format ticket number as YYYYMMDDHHmm from receivedDateTime (UTC)
+      // Format ticket number as YYYYMMDDHHmm from receivedDateTime (local, 24-hour/military time)
       let ticketNumber = "";
       if (email.receivedDateTime) {
         const dt = new Date(email.receivedDateTime);
+        console.log('TicketNumber Debug:', email.receivedDateTime, dt.toString());
         const pad = (n) => n.toString().padStart(2, '0');
-        ticketNumber = `${dt.getUTCFullYear()}${pad(dt.getUTCMonth()+1)}${pad(dt.getUTCDate())}${pad(dt.getUTCHours())}${pad(dt.getUTCMinutes())}`;
+        ticketNumber = `${dt.getFullYear()}${pad(dt.getMonth()+1)}${pad(dt.getDate())}${pad(dt.getHours())}${pad(dt.getMinutes())}`;
       }
       const payload = {
         fields: {
